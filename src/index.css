@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-bg: #0f172a;
+  --color-dark-card: rgba(30, 41, 59, 0.7);
+  --color-primary: #3b82f6;
+  --color-secondary: #8b5cf6;
+  --color-accent: #10b981;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+}
+
+body {
+  background-color: var(--color-dark-bg);
+  color: white;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body.landing {
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Glassmorphism utilities */
+.glass-panel {
+  background: var(--color-dark-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Scroll entrance animations ── */
+.slide-hidden-left  { opacity: 0; transform: translateX(-80px); }
+.slide-hidden-right { opacity: 0; transform: translateX(80px); }
+.slide-hidden-up    { opacity: 0; transform: translateY(60px); }
+
+.slide-hidden-left,
+.slide-hidden-right,
+.slide-hidden-up {
+  transition: opacity 0.75s cubic-bezier(0.22,1,0.36,1), transform 0.75s cubic-bezier(0.22,1,0.36,1);
+}
+
+.slide-visible {
+  opacity: 1 !important;
+  transform: translate(0, 0) !important;
+}
