@@ -1,18 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Thermometer, Wind, Waves, Gauge, Activity, AlertTriangle } from 'lucide-react';
+import { Thermometer, Wind, Waves, Gauge, Activity, AlertTriangle, Building2, X } from 'lucide-react';
 
-const PINS = [
-  { id: 'temp',     label: 'Temperature', unit: '°C',    icon: Thermometer, position: '0.8 2.1 0.3',   normal: '0 1 0',  getValue: d => d?.dht11?.temp,        warning: 30,   danger: 35,   desc: 'HVAC zone · Roof' },
-  { id: 'humidity', label: 'Humidity',    unit: '%',     icon: Waves,       position: '-0.5 1.6 1.2',  normal: '0 0 1',  getValue: d => d?.dht11?.humidity,    warning: 70,   danger: 85,   desc: 'Atrium · Front wall' },
-  { id: 'co2',      label: 'CO₂',         unit: 'ppm',   icon: AlertTriangle,position: '-1.4 1.0 0.0', normal: '-1 0 0', getValue: d => d?.co2,                warning: 800,  danger: 1000, desc: 'Ventilation shaft' },
-  { id: 'co',       label: 'CO',          unit: 'ppm',   icon: AlertTriangle,position: '1.4 0.5 0.2',  normal: '1 0 0',  getValue: d => d?.co,                 warning: 20,   danger: 50,   desc: 'Basement plant room' },
-  { id: 'noise',    label: 'Noise',       unit: 'mV',    icon: Activity,    position: '0.1 0.2 0.8',   normal: '0 0 1',  getValue: d => d?.noise,              warning: 600,  danger: 700,  desc: 'Machinery floor' },
-  { id: 'pressure', label: 'Pressure',    unit: 'hPa',   icon: Gauge,       position: '1.1 2.6 -0.4',  normal: '0 1 0',  getValue: d => d?.bmp180?.pressure,   warning: 1020, danger: 1030, desc: 'Roof weather station' },
-  { id: 'flow',     label: 'Flow Rate',   unit: 'L/min', icon: Wind,        position: '-0.8 0.8 -1.0', normal: '0 0 -1', getValue: d => d?.flow,               warning: 7,    danger: 9,    desc: 'Main water riser' },
+const BUILDINGS = [
+  { id: 'main-building', label: 'Main Factory', position: '0 1.5 0', normal: '0 1 0', desc: 'Central Processing Facility' }
 ];
 
-
+const SENSORS = [
+  { id: 'temp',     label: 'Temperature', unit: '°C',    icon: Thermometer, getValue: d => d?.dht11?.temp },
+  { id: 'humidity', label: 'Humidity',    unit: '%',     icon: Waves,       getValue: d => d?.dht11?.humidity },
+  { id: 'co2',      label: 'CO₂',         unit: 'ppm',   icon: AlertTriangle,getValue: d => d?.co2 },
+  { id: 'co',       label: 'CO',          unit: 'ppm',   icon: AlertTriangle,getValue: d => d?.co },
+  { id: 'noise',    label: 'Noise',       unit: 'mV',    icon: Activity,    getValue: d => d?.noise },
+  { id: 'pressure', label: 'Pressure',    unit: 'hPa',   icon: Gauge,       getValue: d => d?.bmp180?.pressure },
+  { id: 'flow',     label: 'Flow Rate',   unit: 'L/min', icon: Wind,        getValue: d => d?.flow },
+];
 
 const ST = {
   danger:  { dot: '#ef4444', shadow: '0 0 12px 4px #ef444480', ring: '#ef444440', popup: 'border-red-500/70 bg-red-950/95',       label: 'text-red-400',    badge: 'bg-red-500/20 text-red-300',      tag: '⚠ DANGER'  },
@@ -21,213 +23,197 @@ const ST = {
   normal:  { dot: '#22d3ee', shadow: '0 0 8px 2px #22d3ee60',  ring: null,        popup: 'border-cyan-500/50 bg-slate-900/95',    label: 'text-cyan-400',   badge: 'bg-cyan-500/20 text-cyan-300',    tag: '● NOMINAL' },
 };
 
-/* Single hotspot slot — dot + ping ring + always-visible name label */
-const HotspotDot = ({ pin, status, value }) => {
-  const st = ST[status] || ST.normal;
-  const Icon = pin.icon;
-  const isAlert = status === 'danger' || status === 'warning';
-  const formattedValue = value != null && !isNaN(value) ? parseFloat(value).toFixed(1) : '--';
-
-  return (
-    <div
-      slot={`hotspot-${pin.id}`}
-      data-position={pin.position}
-      data-normal={pin.normal}
-      style={{ display: 'block', width: 0, height: 0, position: 'relative' }}
-    >
-      {/* Ping ring — alert only */}
-      {isAlert && (
-        <div style={{
-          position: 'absolute', width: 32, height: 32, borderRadius: '50%',
-          background: st.ring, top: -16, left: -16,
-          animation: 'ping 1.4s cubic-bezier(0,0,0.2,1) infinite',
-          pointerEvents: 'none',
-        }} />
-      )}
-
-      {/* Dot */}
-      <div style={{
-        position: 'absolute', width: 22, height: 22, borderRadius: '50%',
-        background: st.dot, boxShadow: st.shadow,
-        top: -11, left: -11,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: '2px solid rgba(255,255,255,0.25)',
-        zIndex: 2,
-      }}>
-        <Icon size={11} color="#000" strokeWidth={2.5} />
-      </div>
-
-      {/* Always-visible label: name + value + alert level for warning/danger */}
-      <div style={{
-        position: 'absolute',
-        left: 16, top: -10,
-        display: 'flex', flexDirection: 'column', gap: 1,
-        pointerEvents: 'none', whiteSpace: 'nowrap',
-      }}>
-        {/* Name row */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          background: 'rgba(2,8,23,0.75)',
-          border: `1px solid ${st.dot}50`,
-          borderRadius: 6, padding: '1px 6px',
-          backdropFilter: 'blur(6px)',
-        }}>
-          <span style={{ color: st.dot, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-            {pin.label}: {formattedValue} {pin.unit}
-          </span>
-        </div>
-
-        {/* Alert level row — only for warning / danger */}
-        {isAlert && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            background: `${st.dot}18`,
-            border: `1px solid ${st.dot}60`,
-            borderRadius: 6, padding: '1px 6px',
-            backdropFilter: 'blur(6px)',
-          }}>
-            <span style={{ color: st.dot, fontSize: 9, fontWeight: 800, fontFamily: 'monospace', letterSpacing: '0.08em' }}>
-              {st.tag}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+const getOverallStatus = (statuses) => {
+  const vals = Object.values(statuses || {});
+  if (vals.includes('danger')) return 'danger';
+  if (vals.includes('warning')) return 'warning';
+  return 'success';
 };
 
-/* Popup rendered as a regular DOM overlay — positioned via model-viewer's getHotspot screen coords */
-const PopupOverlay = ({ pin, data, mvRef }) => {
-  const [pos, setPos]         = useState(null);
-  const [visible, setVisible]  = useState(false);
-  const rafRef = useRef(null);
+// Simulated zones based on 3D coordinates
+const getBuildingZone = (x, z) => {
+  // Admin Sector & Outside Areas (Slightly safer/cooler)
+  if (x <= 0 && z <= 0) return { 
+    name: 'Admin Sector', 
+    mods: { temp: -1.2, humidity: 2.5, co2: -15, co: -0.5, noise: -15, pressure: 1.0, flow: 0 } 
+  };
+  
+  // Main Plant (Slight variation)
+  if (x > 0 && z > 0) return { 
+    name: 'Main Plant', 
+    mods: { temp: 1.5, humidity: -3.0, co2: 25, co: 1.2, noise: 18, pressure: 2.5, flow: 0.5 } 
+  };
 
-  const raw    = pin.getValue(data);
-  const value  = raw != null && !isNaN(raw) ? parseFloat(raw).toFixed(1) : '--';
-  const st     = ST[status] || ST.normal;
-  const Icon   = pin.icon;
-  const isAlert = status === 'danger' || status === 'warning';
+  // Storage Facility (Slight variation)
+  if (x > 0 && z <= 0) return { 
+    name: 'Storage Facility', 
+    mods: { temp: 0.8, humidity: 4.5, co2: 10, co: 0.4, noise: -5, pressure: -1.5, flow: -0.2 } 
+  };
 
-  // Track hotspot screen position every animation frame
-  useEffect(() => {
-    const mv = mvRef.current;
-    if (!mv) return;
+  // Cooling Towers (Slight variation)
+  return { 
+    name: 'Cooling Towers', 
+    mods: { temp: -0.5, humidity: 8.0, co2: -5, co: -0.2, noise: 8, pressure: -2.0, flow: 1.2 } 
+  };
+};
 
-    const tick = () => {
-      const hs = mv.queryHotspot(`hotspot-${pin.id}`);
-      if (hs) {
-        // data-visible is set by model-viewer when hotspot faces camera
-        const isVis = hs.getAttribute('data-visible') !== 'false';
-        setVisible(isVis);
+// Helpers for recalculating local statuses based on modified zone data
+const getStatus = (value, warning, danger) => {
+  if (value >= danger) return 'danger';
+  if (value >= warning) return 'warning';
+  return 'success';
+};
+const getHumidityStatus = (v) => {
+  if (!v) return 'normal';
+  if (v < 30 || v > 70) return 'danger';
+  if (v < 40 || v > 60) return 'warning';
+  return 'success';
+};
+const getPressureStatus = (v) => {
+  if (!v) return 'normal';
+  if (v < 980 || v > 1040) return 'danger';
+  if (v < 1000 || v > 1020) return 'warning';
+  return 'success';
+};
+const getFlowStatus = (v) => {
+  if (!v) return 'normal';
+  if (v < 0.5 || v > 10) return 'danger';
+  if (v < 1 || v > 8) return 'warning';
+  return 'success';
+};
 
-        if (isVis) {
-          // getBoundingClientRect of the hotspot element gives screen position
-          const rect = hs.getBoundingClientRect();
-          const mvRect = mv.getBoundingClientRect();
-          setPos({
-            x: rect.left - mvRect.left + rect.width / 2,
-            y: rect.top  - mvRect.top  + rect.height / 2,
-          });
-        }
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
+const BuildingDataPanel = ({ pos, data, zone, onClose }) => {
+  // Apply zone modifiers to the base data
+  const modifiedData = data ? {
+    dht11: {
+      temp: (data.dht11?.temp || 0) + zone.mods.temp,
+      humidity: (data.dht11?.humidity || 0) + zone.mods.humidity,
+    },
+    co2: Math.max(0, (data.co2 || 0) + zone.mods.co2),
+    co: Math.max(0, (data.co || 0) + zone.mods.co),
+    noise: Math.max(0, (data.noise || 0) + zone.mods.noise),
+    bmp180: {
+      pressure: (data.bmp180?.pressure || 0) + zone.mods.pressure,
+    },
+    flow: Math.max(0, (data.flow || 0) + zone.mods.flow),
+  } : null;
 
-    // Start tracking after model loads
-    const onLoad = () => { rafRef.current = requestAnimationFrame(tick); };
-    mv.addEventListener('load', onLoad);
-    // Also start immediately in case already loaded
-    rafRef.current = requestAnimationFrame(tick);
+  // Recalculate statuses for this specific zone so colors match the new values
+  const localStatuses = modifiedData ? {
+    temp: getStatus(modifiedData.dht11.temp, 28, 32),
+    humidity: getHumidityStatus(modifiedData.dht11.humidity),
+    pressure: getPressureStatus(modifiedData.bmp180.pressure),
+    noise: getStatus(modifiedData.noise, 500, 700),
+    flow: getFlowStatus(modifiedData.flow),
+    co2: getStatus(modifiedData.co2, 800, 1000),
+    co: getStatus(modifiedData.co, 9, 35)
+  } : {};
 
-    return () => {
-      mv.removeEventListener('load', onLoad);
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, [pin.id, mvRef]);
-
-  // Alert pins: full detail card always visible when facing camera
-  // Normal pins: no popup needed — label on dot is enough
-  const showPopup = visible && isAlert;
-
-  if (!pos) return null;
+  const overallStatus = getOverallStatus(localStatuses);
+  const st = ST[overallStatus] || ST.normal;
 
   return (
-    <>
-      {/* Full detail popup — alert pins only, always shown when facing camera */}
-      <AnimatePresence>
-        {showPopup && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.82, y: 8 }}
-            animate={{ opacity: 1, scale: 1,    y: 0 }}
-            exit={{   opacity: 0, scale: 0.82, y: 8 }}
-            transition={{ duration: 0.16 }}
-            style={{
-              position: 'absolute',
-              left: pos.x,
-              top: pos.y - 28,
-              transform: 'translate(-50%, -100%)',
-              minWidth: isAlert ? 168 : 130,
-              zIndex: 40,
-              pointerEvents: 'none',
-            }}
-          >
-            {/* Stem */}
-            <div style={{
-              position: 'absolute', bottom: -10, left: '50%',
-              transform: 'translateX(-50%)',
-              width: 1.5, height: 12,
-              background: `linear-gradient(to bottom, ${st.dot}, transparent)`,
-            }} />
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 10 }}
+        transition={{ duration: 0.2 }}
+        style={{
+          position: 'absolute',
+          left: pos.x,
+          top: pos.y - 40,
+          transform: 'translate(-50%, -100%)',
+          minWidth: 420,
+          zIndex: 50,
+          pointerEvents: 'auto',
+        }}
+      >
+        <div style={{
+          position: 'absolute', bottom: -12, left: '50%',
+          transform: 'translateX(-50%)',
+          width: 2, height: 16,
+          background: `linear-gradient(to bottom, ${st.dot}, transparent)`,
+          pointerEvents: 'none',
+        }} />
 
-            <div
-              className={`rounded-xl border backdrop-blur-xl px-3 py-2 font-mono shadow-2xl ${st.popup}`}
-              style={{ boxShadow: `0 0 20px ${st.dot}30` }}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="flex items-center gap-1.5">
-                  <Icon size={11} style={{ color: st.dot }} />
-                  <span className={`text-[11px] font-bold tracking-wide ${st.label}`}>{pin.label}</span>
-                </div>
-                <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold tracking-widest ${st.badge}`}>
-                  {st.tag}
-                </span>
-              </div>
-
-              {/* Value */}
-              <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-2xl font-bold leading-none" style={{ color: st.dot }}>{value}</span>
-                <span className="text-slate-400 text-[10px]">{pin.unit}</span>
-              </div>
-
-              {/* Alert detail */}
-              {isAlert && (
-                <>
-                  <div className="flex gap-3 text-[9px] text-slate-400 mb-1.5">
-                    <span>⚡ <span className="text-yellow-400">{pin.warning}</span></span>
-                    <span>⚠ <span className="text-red-400">{pin.danger}</span></span>
-                  </div>
-                  <div className="w-full bg-slate-700/60 rounded-full overflow-hidden" style={{ height: 3 }}>
-                    <motion.div
-                      animate={{ width: `${Math.min((raw / (pin.danger * 1.1)) * 100, 100)}%` }}
-                      transition={{ type: 'spring', stiffness: 60, damping: 12 }}
-                      style={{ height: 3, borderRadius: 9999, background: st.dot, boxShadow: `0 0 6px ${st.dot}` }}
-                    />
-                  </div>
-                  <p className="text-slate-500 text-[9px] mt-1.5 tracking-wide">{pin.desc}</p>
-                </>
-              )}
+        <div
+          className={`rounded-xl border backdrop-blur-xl shadow-2xl overflow-hidden ${st.popup} flex flex-col`}
+          style={{ boxShadow: `0 8px 32px ${st.dot}30`, maxHeight: '350px' }}
+        >
+          <div className="px-4 py-3 flex justify-between items-center border-b shrink-0" style={{ borderColor: `${st.dot}30`, background: `${st.dot}10` }}>
+            <div className="flex items-center gap-2">
+               <Building2 size={18} style={{ color: st.dot }} />
+               <span className={`text-sm font-bold tracking-wide ${st.label}`}>{zone.name} Data</span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors bg-slate-800/50 hover:bg-slate-700 p-1.5 rounded-full shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="p-3 grid grid-cols-3 gap-2 bg-slate-900/90 overflow-y-auto">
+            {SENSORS.map(sensor => {
+              const valRaw = sensor.getValue(modifiedData || data);
+              const valStr = valRaw != null && !isNaN(valRaw) ? parseFloat(valRaw).toFixed(1) : '--';
+              const sensorStStr = localStatuses[sensor.id] || 'normal';
+              const sSt = ST[sensorStStr] || ST.normal;
+              const Icon = sensor.icon;
+
+              return (
+                <div key={sensor.id} className="flex flex-col gap-1 p-2.5 rounded-lg border border-slate-700/50 transition-colors hover:border-slate-500/50" style={{ background: `${sSt.dot}10` }}>
+                  <div className="flex items-center gap-1.5 opacity-90">
+                    <Icon size={14} style={{ color: sSt.dot }} />
+                    <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest truncate">{sensor.label}</span>
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-lg font-bold leading-none" style={{ color: sSt.dot }}>{valStr}</span>
+                    <span className="text-[9px] text-slate-400 font-mono truncate">{sensor.unit}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
 const ThreeScene = ({ data, statuses = {} }) => {
   const mvRef = useRef(null);
   const isAnomaly = data && (data.co2 > 900 || data.co > 35 || data?.dht11?.temp > 35);
+  const [clickPos, setClickPos] = useState(null);
+
+  const overallStatus = getOverallStatus(statuses);
+
+
+
+  // Handle direct clicks on the 3D model
+  useEffect(() => {
+    const mv = mvRef.current;
+    if (!mv) return;
+
+    const handleClick = (event) => {
+      // positionAndNormalFromPoint casts a ray into the 3D scene.
+      // If it returns a hit, the user clicked the geometry itself!
+      const hit = mv.positionAndNormalFromPoint(event.clientX, event.clientY);
+      
+      if (hit) {
+        const mvRect = mv.getBoundingClientRect();
+        setClickPos({
+          x: event.clientX - mvRect.left,
+          y: event.clientY - mvRect.top,
+          zone: getBuildingZone(hit.position.x, hit.position.z)
+        });
+      } else {
+        // If they click empty space in the viewer, close the panel
+        setClickPos(null);
+      }
+    };
+
+    mv.addEventListener('click', handleClick);
+    return () => mv.removeEventListener('click', handleClick);
+  }, []);
 
   return (
     <div className="w-full h-full relative border border-slate-700/40 rounded-2xl overflow-hidden" style={{ background: '#020817' }}>
@@ -249,18 +235,18 @@ const ThreeScene = ({ data, statuses = {} }) => {
         exposure="1.2"
         style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
       >
-        {/* Dots only inside model-viewer — they rotate with the model */}
-        {data && PINS.map(pin => (
-          <HotspotDot key={pin.id} pin={pin} status={statuses[pin.id]} value={pin.getValue(data)} />
-        ))}
+        {/* No hotspots required! Direct mesh interaction enabled. */}
       </model-viewer>
 
-      {/* Popups outside model-viewer — positioned via rAF screen coords, hover works normally */}
-      {data && PINS.map(pin => (
-        <PopupOverlay key={pin.id} pin={pin} data={data} mvRef={mvRef} status={statuses[pin.id]} />
-      ))}
+      {clickPos && (
+        <BuildingDataPanel
+          pos={clickPos}
+          data={data}
+          zone={clickPos.zone}
+          onClose={() => setClickPos(null)}
+        />
+      )}
 
-      {/* Anomaly banner */}
       <AnimatePresence>
         {isAnomaly && (
           <motion.div
@@ -269,15 +255,10 @@ const ThreeScene = ({ data, statuses = {} }) => {
             exit={{ opacity: 0, y: -20 }}
             className="absolute top-14 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-full border border-red-500/60 bg-red-950/80 backdrop-blur-md text-red-300 text-xs font-bold tracking-widest pointer-events-none animate-pulse"
           >
-            <AlertTriangle size={13} /> ANOMALY DETECTED — CHECK HIGHLIGHTED ZONES
+            <AlertTriangle size={13} /> DANGER ZONE HIGHLIGHTED — CHECK ANOMALIES
           </motion.div>
         )}
       </AnimatePresence>
-
-      <style>{`
-        [slot^="hotspot-"][data-visible="false"] { display: none; }
-        @keyframes ping { 75%,100% { transform: scale(2); opacity: 0; } }
-      `}</style>
 
       <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none z-10" />
     </div>

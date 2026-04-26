@@ -5,6 +5,9 @@ import SensorCard from './components/SensorCard';
 import ThreeScene from './components/ThreeScene';
 import LandingPage from './components/LandingPage';
 import DashboardFX from './components/DashboardFX';
+import AIInsightsPanel from './components/AIInsightsPanel';
+import MobileAlertDispatcher from './components/MobileAlertDispatcher';
+import { BrainCircuit } from 'lucide-react';
 
 function App() {
   const { data, connected } = useMqtt();
@@ -12,6 +15,20 @@ function App() {
   const [fullscreen, setFullscreen] = useState(false);
   const modelRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
+  
+  const [history, setHistory] = useState([]);
+  const [showAI, setShowAI] = useState(false);
+
+  // Track historical data for AI Analyst
+  useEffect(() => {
+    if (data) {
+      setHistory(prev => {
+        const updated = [...prev, data];
+        if (updated.length > 30) return updated.slice(updated.length - 30);
+        return updated;
+      });
+    }
+  }, [data]);
 
   // Lock/unlock body scroll for landing
   useEffect(() => {
@@ -94,6 +111,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-200 font-sans relative">
       <DashboardFX />
+      <MobileAlertDispatcher data={data} />
 
       {/* Header */}
       <header className="flex justify-between items-end px-4 md:px-8 pt-6 pb-4 border-b border-slate-800/60 relative z-20">
@@ -108,7 +126,19 @@ function App() {
             <HardDrive size={14} /> Node Monitor: <span className="text-slate-200 font-semibold">{data?.node || 'Scanning...'}</span>
           </p>
         </div>
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm backdrop-blur-md transition-colors duration-500 ${
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowAI(!showAI)}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full border text-sm font-medium tracking-wide backdrop-blur-md transition-all duration-300 ${
+              showAI ? 'bg-blue-500/20 border-blue-400 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.5)]' 
+                     : 'bg-blue-950/40 border-blue-500/30 text-blue-400 hover:bg-blue-900/60'
+            }`}
+          >
+            <BrainCircuit size={16} className={showAI ? 'animate-pulse' : ''} />
+            AI ANALYST
+          </button>
+          
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm backdrop-blur-md transition-colors duration-500 ${
           connected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
           : data    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                     : 'bg-red-500/10 border-red-500/30 text-red-400'
@@ -119,8 +149,12 @@ function App() {
           <div className={`w-2 h-2 rounded-full ml-1 ${
             connected ? 'bg-emerald-500 animate-pulse' : data ? 'bg-amber-500 animate-pulse' : 'bg-red-500 animate-pulse'
           }`} />
+          </div>
         </div>
       </header>
+
+      {/* AI Insights Overlay */}
+      {showAI && <AIInsightsPanel history={history} onClose={() => setShowAI(false)} />}
 
       {/* Full-width 3D Model */}
       <div ref={modelRef} className="relative w-full z-10 bg-[#020817]" style={{ height: fullscreen ? '100vh' : '75vh' }}>
